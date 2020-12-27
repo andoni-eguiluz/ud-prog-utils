@@ -3,6 +3,7 @@ package utils.tablas;
 import java.awt.*;
 import java.io.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import javax.swing.*;
@@ -168,12 +169,14 @@ public class ScanSQLInsert {
 	
 	/** Carga las tablas SQL del fichero indicado
 	 * @param fileName	Fichero .sql del que cargar los datos
+	 * @param progreso	Callback de progreso al que se llamará con el progreso de 0.0 a 1.0  (null si no se quiere utilizar)
 	 * @return	Mapa de tablas con clave nombre de tabla 
 	 */
-	public static HashMap<String,Tabla> cargarTablasSQL( String fileName ) {
+	public static HashMap<String,Tabla> cargarTablasSQL( String fileName, Consumer<Double> progreso ) {
 		HashMap<String,ArrayList<FilaSQL>> mapaAL = new HashMap<>();  // Mapa para las listas de datos
 		HashMap<String,Tabla> mapaT = new HashMap<>();  // Mapa para las tablas
 		try {
+			if (progreso!=null) progreso.accept( 0.0 );
 			File f = new File(fileName);
 			ScanSQLInsert ssi = new ScanSQLInsert( new FileInputStream( f ) );
 			if (tablasAIgnorar.length>0) {
@@ -185,12 +188,18 @@ public class ScanSQLInsert {
 				ssi.setTablasACargar( null );
 			}
 			FilaSQL fsql;
+			int numFilas = 0;
 			while ((fsql = ssi.nextFila()) != null) {
+				if (progreso!=null && ssi.getLineaActual()%50==0) {
+					double prog = 1.0 * ssi.getCarsYaLeidos() / f.length();
+					progreso.accept( prog );
+				}
 				if (fsql==FILA_TABLA_IGNORADA) continue;
 				quitarImagenes( fsql.getValores() );
 				ArrayList<FilaSQL> lista = mapaAL.get( fsql.getNombreTabla() );
 				if (lista==null) {
 					lista = new ArrayList<>();
+					lista.add( fsql );
 					mapaAL.put( fsql.getNombreTabla(), lista );
 					Tabla t = Tabla.linkTablaToList( mapaAL.get( fsql.getNombreTabla() ) );
 					mapaT.put( fsql.getNombreTabla(), t );
@@ -199,10 +208,11 @@ public class ScanSQLInsert {
 					if (chequeoFilaOK!=null && !chequeoFilaOK.test(fsql)) {
 						continue;
 					}
+					lista.add( fsql );
 				}
-				lista.add( fsql );
 			}
 			ssi.cerrar();
+			if (progreso!=null) progreso.accept( 1.0 );
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
